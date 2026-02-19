@@ -16,7 +16,7 @@ proc_main: BEGIN
     DECLARE v_status_message      VARCHAR(32);
     DECLARE v_error_message       TEXT;
     DECLARE v_run_status          INT;
-    DECLARE v_run_id              BIGINT;
+    DECLARE v_run_id              VARCHAR(36);
     DECLARE v_records_inserted    BIGINT;
     DECLARE v_records_updated     BIGINT;
     DECLARE v_records_deleted     BIGINT;
@@ -24,7 +24,7 @@ proc_main: BEGIN
     DECLARE v_etl_start_time      DATETIME(6);
     DECLARE v_etl_end_time        DATETIME(6);
 
-    DECLARE v_cdc_id              BIGINT;
+    DECLARE v_cdc_id              VARCHAR(36);
     DECLARE v_cdc_start_ts        DATETIME(6);
     DECLARE v_cdc_end_ts          DATETIME(6);
     DECLARE v_insert_timestamp    DATETIME(6);
@@ -162,18 +162,17 @@ proc_main: BEGIN
     SET v_cdc = v_cdc_table;
 
     -- ------------------------------------------------------------------
-    -- 3) Get run_id and previous CDC window start_time
+    -- 3) Get previous CDC window start_time; generate UUID for run_id (concurrency-safe)
     -- ------------------------------------------------------------------
     SELECT
-        IFNULL(MAX(id), 0) + 1        AS next_id,
-        COALESCE(MAX(cdc_end_ts), TIMESTAMP('1970-01-01 00:00:00')) AS last_end_ts
+        COALESCE(MAX(cdc_end_ts), TIMESTAMP('1970-01-01 00:00:00'))
     INTO
-        v_run_id,
         v_start_time
     FROM etl_job_run.etl_job_log_incremental_date
     WHERE mysql_target_table    = v_mysql_target_table
       AND mysql_target_database = v_mysql_target_database;
 
+    SET v_run_id = UUID();
     SET v_cdc_id = v_run_id;
 
     -- ------------------------------------------------------------------
