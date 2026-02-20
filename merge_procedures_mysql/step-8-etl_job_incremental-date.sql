@@ -309,7 +309,7 @@ proc_main: BEGIN
         '    WHEN column_name = ''PLACE'' THEN ''CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(l.data, ''''$.\"place\"'''')), ''''null'''') AS CHAR(255)) AS `PLACE`'' ',
         '    ELSE CONCAT(''CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(l.data, ''''$.\"'', column_name, ''\"'''')) , ''''null'''') AS '', ',
         '      CASE DATA_TYPE WHEN ''int'' THEN ''SIGNED'' WHEN ''bigint'' THEN ''SIGNED'' WHEN ''tinyint'' THEN ''SIGNED'' WHEN ''smallint'' THEN ''SIGNED'' WHEN ''mediumint'' THEN ''SIGNED'' ',
-        '        WHEN ''datetime'' THEN ''DATETIME'' WHEN ''timestamp'' THEN ''DATETIME'' WHEN ''date'' THEN ''DATE'' WHEN ''time'' THEN ''TIME'' ',
+        '        WHEN ''datetime'' THEN ''DATETIME'' WHEN ''timestamp'' THEN CONCAT(''DATETIME('', COALESCE(DATETIME_PRECISION, 0), '')'') WHEN ''date'' THEN ''DATE'' WHEN ''time'' THEN ''TIME'' ',
         '        WHEN ''varchar'' THEN CONCAT(''CHAR('', COALESCE(CHARACTER_MAXIMUM_LENGTH, 255), '')'') WHEN ''char'' THEN CONCAT(''CHAR('', COALESCE(CHARACTER_MAXIMUM_LENGTH, 255), '')'') ',
         '        WHEN ''decimal'' THEN CONCAT(''DECIMAL('', COALESCE(NUMERIC_PRECISION, 10), '', '', COALESCE(NUMERIC_SCALE, 0), '')'') ',
         '        WHEN ''double'' THEN ''DOUBLE'' WHEN ''float'' THEN ''DOUBLE'' WHEN ''json'' THEN ''JSON'' ELSE ''CHAR(255)'' END, '') AS `'', column_name, ''`'') ',
