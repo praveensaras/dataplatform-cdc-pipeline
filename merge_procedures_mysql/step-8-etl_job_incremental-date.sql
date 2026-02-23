@@ -69,6 +69,10 @@ proc_main: BEGIN
     DECLARE v_source_table        VARCHAR(255);
 
     DECLARE v_partition_by_str    TEXT;
+    DECLARE v_partition_list      TEXT;   -- e.g. 'p050,p051,p052' for PARTITION (p050,p051,p052)
+    DECLARE v_partition_from_str  TEXT;   -- 'PARTITION (p050,p051) ' or ''
+    DECLARE v_day_start           INT;
+    DECLARE v_day_end             INT;
     DECLARE v_join_on_str         TEXT;
     DECLARE v_merge_on_str        TEXT;
     DECLARE v_delete_join_on_str  TEXT;
@@ -344,6 +348,33 @@ proc_main: BEGIN
     -- ------------------------------------------------------------------
     SET v_end_time = NOW(6);
 
+    -- ------------------------------------------------------------------
+    -- 5a) Build partition list for explicit partition pruning (DAYOFYEAR-based p001..p366)
+    --     v_start_time, v_end_time -> partition names -> PARTITION (p050,p051,...)
+    -- ------------------------------------------------------------------
+    SET v_day_start    = DAYOFYEAR(v_start_time);
+    SET v_day_end      = DAYOFYEAR(v_end_time);
+    SET v_partition_list   = NULL;
+    SET v_partition_from_str = '';
+
+    DROP TEMPORARY TABLE IF EXISTS _part_nums;
+    CREATE TEMPORARY TABLE _part_nums AS
+    WITH RECURSIVE nums (n) AS (
+        SELECT 1 UNION ALL SELECT n + 1 FROM nums WHERE n < 366
+    )
+    SELECT n FROM nums;
+
+    SELECT GROUP_CONCAT(CONCAT('p', LPAD(n, 3, '0')) ORDER BY n SEPARATOR ', ')
+    INTO v_partition_list
+    FROM _part_nums
+    WHERE (v_day_start <= v_day_end AND n BETWEEN v_day_start AND v_day_end)
+       OR (v_day_start > v_day_end AND (n >= v_day_start OR n <= v_day_end));
+
+    DROP TEMPORARY TABLE IF EXISTS _part_nums;
+
+    IF v_partition_list IS NOT NULL AND v_partition_list != '' THEN
+        SET v_partition_from_str = CONCAT('PARTITION (', v_partition_list, ') ');
+    END IF;
 
     SET v_source_schema = SUBSTRING_INDEX(v_source_fp, '.', 1);
     SET v_source_table  = SUBSTRING_INDEX(v_source_fp, '.', -1);
@@ -371,7 +402,7 @@ proc_main: BEGIN
             '          FROM_UNIXTIME(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.data, ''$.\"__ts_ns\"'')) AS UNSIGNED) / 1000000000) DESC, ',
             '          CAST(JSON_UNQUOTE(JSON_EXTRACT(d.data, ''$.\"__source_pos\"'')) AS SIGNED) DESC ',
             '      ) AS rn ',
-            '    FROM `', REPLACE(v_source_schema, '`', '``'), '`.`', REPLACE(v_source_table, '`', '``'), '` AS d ',
+            '    FROM `', REPLACE(v_source_schema, '`', '``'), '`.`', REPLACE(v_source_table, '`', '``'), '` ', v_partition_from_str, 'AS d ',
             '    WHERE JSON_EXTRACT(d.data, ''$.\"__op\"'') IS NOT NULL ',
             '      AND d.mysql_load_ts > ''', DATE_FORMAT(v_start_time, '%Y-%m-%d %H:%i:%s.%f'), ''' ',
             '      AND d.mysql_load_ts <= ''', DATE_FORMAT(v_end_time, '%Y-%m-%d %H:%i:%s.%f'), ''' ',
@@ -423,7 +454,7 @@ proc_main: BEGIN
     '        FROM_UNIXTIME(CAST(JSON_UNQUOTE(JSON_EXTRACT(d.data, ''$.\"__ts_ns\"'')) AS UNSIGNED) / 1000000000) DESC, ',
     '        CAST(JSON_UNQUOTE(JSON_EXTRACT(d.data, ''$.\"__source_pos\"'')) AS SIGNED) DESC ',
     '    ) AS rn ',
-    '  FROM `', REPLACE(v_source_schema, '`', '``'), '`.`', REPLACE(v_source_table, '`', '``'), '` AS d ',
+    '  FROM `', REPLACE(v_source_schema, '`', '``'), '`.`', REPLACE(v_source_table, '`', '``'), '` ', v_partition_from_str, 'AS d ',
     '  WHERE JSON_EXTRACT(d.data, ''$.\"__op\"'') IS NOT NULL ',
     '    AND d.mysql_load_ts > ''', DATE_FORMAT(v_start_time, '%Y-%m-%d %H:%i:%s.%f'), ''' ',
     '    AND d.mysql_load_ts <= ''', DATE_FORMAT(v_end_time, '%Y-%m-%d %H:%i:%s.%f'), ''' ',
